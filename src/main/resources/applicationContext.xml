@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:context="http://www.springframework.org/schema/context"
+	xmlns:aop="http://www.springframework.org/schema/aop" xmlns:tx="http://www.springframework.org/schema/tx"
+	xmlns:p="http://www.springframework.org/schema/p"
+	xmlns:task="http://www.springframework.org/schema/task"
+	xmlns:mvc="http://www.springframework.org/schema/mvc" 
+	xsi:schemaLocation="
+	http://www.springframework.org/schema/beans 
+	http://www.springframework.org/schema/beans/spring-beans-3.1.xsd
+	http://www.springframework.org/schema/aop 
+	http://www.springframework.org/schema/aop/spring-aop-3.1.xsd
+	http://www.springframework.org/schema/tx 
+	http://www.springframework.org/schema/tx/spring-tx-3.1.xsd
+	http://www.springframework.org/schema/mvc  
+  http://www.springframework.org/schema/mvc/spring-mvc-3.1.xsd 
+	http://www.springframework.org/schema/context 
+	http://www.springframework.org/schema/context/spring-context-3.1.xsd
+	http://www.springframework.org/schema/task 
+	http://www.springframework.org/schema/task/spring-task-3.0.xsd
+	">
+	<!-- 数据源配置 -->
+	<!--<context:property-placeholder location="classpath:jdbc.properties"/> -->
+	<bean id="propertyHolder"
+		class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+		<property name="systemPropertiesModeName" value="SYSTEM_PROPERTIES_MODE_OVERRIDE" />
+		<property name="ignoreResourceNotFound" value="true" />
+		<property name="locations">
+			<list>
+				<value>classpath*:jdbc.properties</value>
+				<value>classpath*:config.properties</value>
+			</list>
+		</property>
+	</bean>
+
+	<bean id="dataSource" class="com.mchange.v2.c3p0.ComboPooledDataSource">
+		<property name="driverClass" value="${jdbc.driverClassName}" />
+		<property name="jdbcUrl" value="${jdbc.url}" />
+		<property name="user" value="${jdbc.username}" />
+		<property name="password" value="${jdbc.password}" />
+		<property name="autoCommitOnClose" value="true" />
+		<property name="checkoutTimeout" value="${cpool.checkoutTimeout}" />
+		<property name="initialPoolSize" value="${cpool.minPoolSize}" />
+		<property name="minPoolSize" value="${cpool.minPoolSize}" />
+		<property name="maxPoolSize" value="${cpool.maxPoolSize}" />
+		<property name="maxIdleTime" value="${cpool.maxIdleTime}" />
+		<property name="acquireIncrement" value="${cpool.acquireIncrement}" />
+		<property name="maxIdleTimeExcessConnections" value="${cpool.maxIdleTimeExcessConnections}" />
+	</bean>
+
+	<bean id="jdbcTemplate" class="org.springframework.jdbc.core.JdbcTemplate">
+		<property name="dataSource" ref="dataSource"></property>
+	</bean>
+
+	<!-- 数据连接管理 -->
+	<bean id="transactionManager"
+		class="org.springframework.jdbc.datasource.DataSourceTransactionManager">
+		<property name="dataSource" ref="dataSource" />
+	</bean>
+	<!-- ibatis3.x 配置 -->
+	<bean id="sqlSessionFactory" class="org.mybatis.spring.SqlSessionFactoryBean">
+		<!--<property name="configLocation" value="classpath:mybatis-config.xml"/> -->
+		<property name="dataSource" ref="dataSource" />
+		<property name="mapperLocations" value="classpath*:org/cx/mapper/*.xml" />
+		<!--<property name="typeAliasesPackage" value="org.mybatis.jpetstore.domain" 
+			/> -->
+	</bean>
+	<bean id="sqlSessionTemplate" class="org.mybatis.spring.SqlSessionTemplate">
+		<!--<property name="sqlSessionFactory" ref="sqlSessionFactory" /> -->
+		<constructor-arg index="0" ref="sqlSessionFactory" />
+	</bean>
+
+	<bean class="org.mybatis.spring.mapper.MapperScannerConfigurer">
+		<property name="basePackage" value="org.cx.mapper" />
+	</bean>
+	
+	<!-- 启动时的加载配置文件的顺序为
+		1、web.xml
+		2、root-context.xml(Spring的配置文件applicationContext.xml)
+		3、servlet-context.xml(SpringMVC的配置文件SpringMVC-servlet.xml)
+		由于root-context.xml配置文件中Controller会先进行扫描装配，但是此时service还没有进行事务处理，
+		得到的将是原样的Service（没有经过事务处理）,
+		所以我们必须在root-context.xml中不扫描Controller -->
+	<context:component-scan base-package="org.cx">
+		<context:exclude-filter type="annotation" expression="org.springframework.stereotype.Controller"/>
+	</context:component-scan>
+<!--     <mvc:annotation-driven/> -->
+	
+<!-- 	<bean name="org.springframework.web.servlet.mvc.annotation.DefaultAnnotationHandlerMapping"></bean> -->
+<!-- 	<bean name="org.springframework.web.servlet.mvc.annotation.AnnotationMethodHandlerAdapter"></bean> -->
+	<!-- 启用注解事务声明 -->
+	<tx:annotation-driven transaction-manager="transactionManager" />
+<!-- 	<tx:annotation-driven transaction-manager="transactionManager" proxy-target-class="true"/> -->
+
+	<!-- 配置SpringMVC的视图解析器 -->  
+  <!-- 其viewClass属性的默认值就是org.springframework.web.servlet.view.JstlView -->  
+<!--   <bean class="org.springframework.web.servlet.view.InternalResourceViewResolver">   -->
+<!--       <property name="prefix" value="/"/>   -->
+<!--       <property name="suffix" value=".jsp"/>   -->
+<!--   </bean>   -->
+  
+  <!-- 默认访问跳转到登录页面(即定义无需Controller的url<->view直接映射) -->  
+<!--   <mvc:view-controller path="/" view-name="forward:/login.jsp"/>   -->
+  
+  
+  <!-- 继承自AuthorizingRealm的自定义Realm,即指定Shiro验证用户登录的类为自定义的ShiroDbRealm.java -->  
+  <bean id="myRealm" class="org.cx.realm.MyRealm"/>  
+  
+  <!-- Shiro默认会使用Servlet容器的Session,可通过sessionMode属性来指定使用Shiro原生Session -->  
+   <!-- 即<property name="sessionMode" value="native"/>,详细说明见官方文档 -->  
+   <!-- 这里主要是设置自定义的单Realm应用,若有多个Realm,可使用'realms'属性代替 -->  
+   <bean id="securityManager" class="org.apache.shiro.web.mgt.DefaultWebSecurityManager">  
+       <property name="realm" ref="myRealm"/>  
+   </bean>  
+  
+    <!-- Shiro主过滤器本身功能十分强大,其强大之处就在于它支持任何基于URL路径表达式的、自定义的过滤器的执行 -->  
+    <!-- Web应用中,Shiro可控制的Web请求必须经过Shiro主过滤器的拦截,Shiro对基于Spring的Web应用提供了完美的支持 -->  
+    <bean id="shiroFilter" class="org.apache.shiro.spring.web.ShiroFilterFactoryBean">  
+	    <!-- Shiro的核心安全接口,这个属性是必须的 -->  
+	    <property name="securityManager" ref="securityManager"/>  
+	    <!-- 要求登录时的链接(可根据项目的URL进行替换),非必须的属性,默认会自动寻找Web工程根目录下的"/login.jsp"页面 -->  
+	    <property name="loginUrl" value="/login.jsp"/>  
+	    <!-- 登录成功后要跳转的连接(本例中此属性用不到,因为登录成功后的处理逻辑在LoginController里硬编码为main.jsp了) -->  
+	    <!-- <property name="successUrl" value="/system/main"/> -->  
+	    <!-- 用户访问未对其授权的资源时,所显示的连接 -->  
+	    <!-- 若想更明显的测试此属性可以修改它的值,如unauthor.jsp,然后用[玄玉]登录后访问/admin/listUser.jsp就看见浏览器会显示unauthor.jsp -->  
+	    <property name="unauthorizedUrl" value="/unauthor.jsp"/>  
+	    <!-- Shiro连接约束配置,即过滤链的定义 -->  
+	    <!-- 此处可配合我的这篇文章来理解各个过滤连的作用http://blog.csdn.net/jadyer/article/details/12172839 -->  
+	    <!-- 下面value值的第一个'/'代表的路径是相对于HttpServletRequest.getContextPath()的值来的 -->  
+	    <!-- anon：它对应的过滤器里面是空的,什么都没做,这里.do和.jsp后面的*表示参数,比方说login.jsp?main这种 -->  
+	    <!-- authc：该过滤器下的页面必须验证后才能访问,它是Shiro内置的一个拦截器org.apache.shiro.web.filter.authc.FormAuthenticationFilter -->  
+	    <property name="filterChainDefinitions">  
+	        <value>  
+<!-- 	        		/shiro/test=anon -->
+	            /mydemo/login=anon  
+	            /mydemo/getVerifyCodeImage=anon  
+	            /main**=authc  
+	            /user_info**=authc  
+	            /user_list**=authc,perms[admin:manage]  
+	        </value>  
+	    </property>  
+	</bean>  
+	
+	<!-- 保证实现了Shiro内部lifecycle函数的bean执行 -->  
+	<bean id="lifecycleBeanPostProcessor" class="org.apache.shiro.spring.LifecycleBeanPostProcessor"/>  
+	
+	<!-- 开启Shiro的注解(如@RequiresRoles,@RequiresPermissions),需借助SpringAOP扫描使用Shiro注解的类,并在必要时进行安全逻辑验证 -->  
+	<!-- 配置以下两个bean即可实现此功能 -->  
+	<!-- Enable Shiro Annotations for Spring-configured beans. Only run after the lifecycleBeanProcessor has run -->  
+	<!-- 由于本例中并未使用Shiro注解,故注释掉这两个bean(个人觉得将权限通过注解的方式硬编码在程序中,查看起来不是很方便,没必要使用) -->  
+	<!--   
+	<bean class="org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator" depends-on="lifecycleBeanPostProcessor"/>  
+	<bean class="org.apache.shiro.spring.security.interceptor.AuthorizationAttributeSourceAdvisor">  
+	    <property name="securityManager" ref="securityManager"/>  
+	</bean>  
+	 --> 
+</beans>
